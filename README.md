@@ -3,7 +3,7 @@ Machine Learning tool that is able to analyze when a model is working incorrectl
 
 *   **[Michael Orishagbemi] ([miori2])** - Role/Focus (e.g., Data Preprocessing, Feature Engineering)
 *   **[Christian Douglass] ([GitHub Username])** - Role/Focus (e.g., Model Architecture, Training Pipelines)
-*   **[Abdulquayyum Yussuf] ([GitHub Username])** - Role/Focus (e.g., Hyperparameter Tuning, Evaluation & Deployment)
+*   **[Abdulquayyum Yussuf] ([AYO-YUSSUF])** - Role/Focus (e.g., Hyperparameter Tuning, Evaluation & Deployment)
 
 
 ## 🚀 Live Demo
