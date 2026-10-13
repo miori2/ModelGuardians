@@ -1,12 +1,14 @@
-# Installed tools we for the project using pip install -r requirements.txt
-# Can check by typing pip list inside terminal
+"""Compatibility entrypoint for the model monitoring application."""
 
-import flask
-import pandas
-import numpy
-import sklearn
-import joblib
-import requests
-import plotly
+import os
 
-print("All Python packages imported successfully!")
+from app import app, create_app
+
+__all__ = ["app", "create_app"]
+
+
+if __name__ == "__main__":
+    app.run(
+        host=os.getenv("FLASK_HOST", "127.0.0.1"),
+        port=int(os.getenv("PORT", "5000")),
+    )
