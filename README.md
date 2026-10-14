@@ -74,3 +74,52 @@ Server-Sent Events to receive every enriched event in real time. Configure
 `OLLAMA_HOST`, `OLLAMA_MODEL`, `FLASK_HOST`, and `PORT` through environment
 variables. If Ollama is unavailable, ingestion remains available and clearly
 reports that the LLM diagnosis could not be generated.
+
+## Automated hyperparameter tuning API
+
+Tuning jobs use the same Ollama configuration as monitoring. A job declares a
+search space, the metric to track, and whether that metric should be minimized
+or maximized. Search-space values can be categorical lists, typed categorical
+domains, or inclusive numeric ranges:
+
+```bash
+curl -X POST http://127.0.0.1:5000/tuning/jobs \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model_name":"fraud-detector",
+    "metric_name":"validation_auc",
+    "direction":"maximize",
+    "max_trials":4,
+    "search_space":{
+      "n_estimators":{"type":"int","min":50,"max":200},
+      "max_depth":[3,5,8],
+      "learning_rate":{"type":"float","min":0.01,"max":0.2}
+    }
+  }'
+```
+
+`POST /tuning/jobs` returns the job, candidate configs, and a
+`candidate_id` for each config. `max_trials` is optional (default `10`, maximum
+`100`); each parameter must have a non-empty domain, with no more than 20
+parameters or 100 categorical values per parameter. Categorical domains may
+also be written as `{"type":"categorical","values":[...]}`. Ollama suggestions
+are strictly checked against the declared search space; if Ollama is
+unavailable or its output is malformed or out of range, safe deterministic
+candidates are used instead. Each candidate reports its `source` as
+`ollama` or `fallback`.
+
+Submit a measured metric for a candidate after evaluating that configuration.
+Each candidate can be submitted once:
+
+```bash
+curl -X POST http://127.0.0.1:5000/tuning/jobs/<JOB_ID>/trials \
+  -H 'Content-Type: application/json' \
+  -d '{"candidate_id":"candidate-1","metric_value":0.93}'
+```
+
+The response includes all submitted trials and `best_trial`, selected according
+to the job's metric direction. Retrieve current job state at
+`GET /tuning/jobs/<JOB_ID>`. Jobs and trial results are held in memory, so they
+are cleared when the application restarts. Invalid job/trial requests return
+HTTP 400, unknown jobs or candidates return HTTP 404, and duplicate trial
+submissions return HTTP 409.
