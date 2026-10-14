@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from datetime import datetime, timezone
 from typing import Any, Iterator
@@ -12,6 +13,7 @@ from flask import Flask, Response, jsonify, request, stream_with_context
 
 from monitoring import MonitoringStore, evaluate_event
 from ollama_client import OllamaAnalyzer
+from tuning import TuningStore, normalize_search_space
 
 
 def utc_now() -> str:
@@ -21,9 +23,11 @@ def utc_now() -> str:
 def create_app(
     analyzer: OllamaAnalyzer | None = None,
     store: MonitoringStore | None = None,
+    tuning_store: TuningStore | None = None,
 ) -> Flask:
     app = Flask(__name__)
     monitoring_store = store or MonitoringStore()
+    hyperparameter_tuning_store = tuning_store or TuningStore()
     llm_analyzer = analyzer or OllamaAnalyzer(
         host=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
         model=os.getenv("OLLAMA_MODEL", "llama3.2"),
@@ -111,6 +115,94 @@ def create_app(
         if session is None:
             return jsonify({"error": "monitoring session not found"}), 404
         return jsonify(session.public())
+
+    @app.post("/tuning/jobs")
+    def create_tuning_job() -> tuple[Any, int]:
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return jsonify({"error": "request body must be a JSON object"}), 400
+        model_name = body.get("model_name")
+        metric_name = body.get("metric_name")
+        direction = body.get("direction")
+        if not isinstance(model_name, str) or not model_name.strip():
+            return jsonify({"error": "model_name is required"}), 400
+        if not isinstance(metric_name, str) or not metric_name.strip():
+            return jsonify({"error": "metric_name is required"}), 400
+        if not isinstance(direction, str) or direction not in {
+            "minimize",
+            "maximize",
+        }:
+            return jsonify({"error": "direction must be 'minimize' or 'maximize'"}), 400
+        max_trials = body.get("max_trials", 10)
+        if type(max_trials) is not int or not 1 <= max_trials <= 100:
+            return jsonify({"error": "max_trials must be an integer between 1 and 100"}), 400
+        try:
+            search_space = normalize_search_space(body.get("search_space"))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+        try:
+            proposed = llm_analyzer.generate_candidates(search_space, max_trials)
+        except (requests.RequestException, ValueError) as exc:
+            app.logger.warning(
+                "Ollama candidate generation unavailable or malformed: %s", exc
+            )
+            proposed = None
+
+        job = hyperparameter_tuning_store.create(
+            model_name=model_name.strip(),
+            search_space=search_space,
+            metric_name=metric_name.strip(),
+            direction=direction,
+            max_trials=max_trials,
+            proposed=proposed,
+        )
+        public_job = job.public()
+        sources = {candidate["source"] for candidate in public_job["candidates"]}
+        if "fallback" in sources:
+            app.logger.warning(
+                "Tuning job %s used fallback candidates for some or all trials",
+                job.id,
+            )
+        return jsonify(public_job), 201
+
+    @app.get("/tuning/jobs/<job_id>")
+    def get_tuning_job(job_id: str) -> tuple[Any, int]:
+        job = hyperparameter_tuning_store.get(job_id)
+        if job is None:
+            return jsonify({"error": "tuning job not found"}), 404
+        return jsonify(job.public())
+
+    @app.post("/tuning/jobs/<job_id>/trials")
+    def submit_tuning_trial(job_id: str) -> tuple[Any, int]:
+        job = hyperparameter_tuning_store.get(job_id)
+        if job is None:
+            return jsonify({"error": "tuning job not found"}), 404
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return jsonify({"error": "request body must be a JSON object"}), 400
+        candidate_id = body.get("candidate_id")
+        if not isinstance(candidate_id, str) or not candidate_id.strip():
+            return jsonify({"error": "candidate_id is required"}), 400
+        metric_value = body.get("metric_value")
+        if (
+            isinstance(metric_value, bool)
+            or not isinstance(metric_value, (int, float))
+            or (
+                isinstance(metric_value, float)
+                and not math.isfinite(metric_value)
+            )
+        ):
+            return jsonify({"error": "metric_value must be a finite number"}), 400
+        try:
+            hyperparameter_tuning_store.submit_trial(
+                job, candidate_id.strip(), metric_value
+            )
+        except KeyError:
+            return jsonify({"error": "candidate not found"}), 404
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 409
+        return jsonify(job.public()), 201
 
     return app
 

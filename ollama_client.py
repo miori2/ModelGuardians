@@ -9,7 +9,7 @@ import requests
 
 
 class OllamaAnalyzer:
-    """Streams a diagnosis from Ollama's /api/generate endpoint."""
+    """Streams diagnoses and candidate configs from Ollama's /api/generate endpoint."""
 
     def __init__(
         self,
@@ -45,3 +45,37 @@ class OllamaAnalyzer:
             if payload.get("done"):
                 break
         return "".join(parts).strip()
+
+    def generate_candidates(
+        self, search_space: dict[str, Any], count: int
+    ) -> list[dict[str, Any]]:
+        prompt = (
+            "Generate hyperparameter configurations for this search space. "
+            f"Return only a JSON array with exactly {count} objects. Each object "
+            "must use only the supplied parameter names and values within their "
+            "declared domains. Do not include markdown or explanations.\n\n"
+            f"Search space: {json.dumps(search_space, sort_keys=True)}"
+        )
+        response = requests.post(
+            f"{self.host}/api/generate",
+            json={"model": self.model, "prompt": prompt, "stream": True},
+            timeout=self.timeout,
+            stream=True,
+        )
+        response.raise_for_status()
+        parts: list[str] = []
+        for line in response.iter_lines(decode_unicode=True):
+            if not line:
+                continue
+            payload = json.loads(line)
+            if not isinstance(payload, dict) or not isinstance(
+                payload.get("response", ""), str
+            ):
+                raise ValueError("Ollama returned a malformed generation chunk")
+            parts.append(payload.get("response", ""))
+            if payload.get("done"):
+                break
+        candidates = json.loads("".join(parts))
+        if not isinstance(candidates, list):
+            raise ValueError("Ollama candidate response must be a JSON array")
+        return candidates
