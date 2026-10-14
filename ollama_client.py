@@ -1,47 +1,81 @@
-"""Ollama streaming diagnosis client."""
-
-from __future__ import annotations
 
 import json
-from typing import Any
-
+import os
 import requests
 
 
+# Stores Ollama address, model, and timeout for analysis requests
 class OllamaAnalyzer:
-    """Streams a diagnosis from Ollama's /api/generate endpoint."""
-
     def __init__(
         self,
-        host: str = "http://localhost:11434",
-        model: str = "llama3.2",
-        timeout: float = 10.0,
-    ) -> None:
+        host="http://localhost:11434",
+        model="llama3.2",
+        timeout=120,
+    ):
         self.host = host.rstrip("/")
         self.model = model
         self.timeout = timeout
 
-    def analyze(self, event: dict[str, Any], signals: dict[str, Any]) -> str:
+# Wrties the instructions and the event/signals to Ollama, and returns the AI's diagnosis
+    def analyze(self, event, signals):
+        # 1. Prepare the information for the AI
         prompt = (
-            "Analyze this model monitoring event. Identify likely anomalies or "
-            "data drift, explain the evidence, and recommend one action. "
-            "Return concise plain text.\n\n"
-            f"Event: {json.dumps(event, sort_keys=True)}\n"
-            f"Signals: {json.dumps(signals, sort_keys=True)}"
+            "You are an assistant for ModelGuardians, a machine "
+            "learning monitoring tool.\n"
+            "Analyze the event and its statistical signals.\n"
+            "Explain whether there may be an anomaly or data drift.\n"
+            "Explain the evidence and recommend one action.\n"
+            "Do not claim that an issue is confirmed without evidence.\n"
+            "Keep your answer concise.\n\n"
+            f"Event: {json.dumps(event)}\n"
+            f"Signals: {json.dumps(signals)}"
         )
+
+        # 2. Send the request to Ollama
         response = requests.post(
             f"{self.host}/api/generate",
-            json={"model": self.model, "prompt": prompt, "stream": True},
+            json={
+                "model": self.model,
+                "prompt": prompt,
+                "stream": False,
+            },
             timeout=self.timeout,
-            stream=True,
         )
+
+        # 3. Check for an HTTP error
         response.raise_for_status()
-        parts: list[str] = []
-        for line in response.iter_lines(decode_unicode=True):
-            if not line:
-                continue
-            payload = json.loads(line)
-            parts.append(payload.get("response", ""))
-            if payload.get("done"):
-                break
-        return "".join(parts).strip()
+
+        # 4. Read the AI's answer
+        result = response.json()
+        diagnosis = result.get("response", "").strip()
+
+        if not diagnosis:
+            raise ValueError("Ollama returned an empty response")
+
+        # 5. Return the answer to the caller
+        return diagnosis
+
+# Let's us test the client independently of the rest of the system
+if __name__ == "__main__":
+    analyzer = OllamaAnalyzer(
+        host=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
+        model=os.getenv("OLLAMA_MODEL", "llama3.2"),
+    )
+
+    test_event = {
+        "prediction": 0.95,
+        "features": [0.2, 0.4, 0.8],
+    }
+
+    test_signals = {
+        "anomaly": True,
+        "drift_indicator": True,
+        "z_score": 4.5,
+    }
+
+    try:
+        answer = analyzer.analyze(test_event, test_signals)
+        print("Ollama diagnosis:")
+        print(answer)
+    except (requests.RequestException, ValueError) as exc:
+        print(f"Analysis failed: {exc}")
