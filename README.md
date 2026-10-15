@@ -123,3 +123,19 @@ to the job's metric direction. Retrieve current job state at
 are cleared when the application restarts. Invalid job/trial requests return
 HTTP 400, unknown jobs or candidates return HTTP 404, and duplicate trial
 submissions return HTTP 409.
+
+## Visualization dashboard
+
+Open `http://127.0.0.1:5000/dashboard` while the application is running to view
+interactive Plotly charts for observed monitoring signals, a short-term linear
+trend forecast, and submitted tuning metrics. The dashboard can be filtered to
+one monitoring session, refreshes data every 15 seconds, and can be refreshed
+on demand. Plotly.js is loaded from its CDN. Forecasts are indicative linear
+projections, not guarantees. Click **Generate insights** to request an LLM
+analysis of aggregated metrics through the configured Ollama model; if Ollama
+is unavailable, the dashboard reports the issue without interrupting
+monitoring or chart data.
+
+Dashboard data is available as JSON from `GET /api/dashboard`, optionally
+filtered with `?session_id=<SESSION_ID>`. Request LLM analysis with
+`POST /api/dashboard/insights` and an optional JSON `session_id`.

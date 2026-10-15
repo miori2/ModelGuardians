@@ -267,6 +267,10 @@ class TuningStore:
         with self._lock:
             return self._jobs.get(job_id)
 
+    def public_jobs(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return [job.public() for job in self._jobs.values()]
+
     def submit_trial(
         self, job: TuningJob, candidate_id: str, metric_value: int | float
     ) -> dict[str, Any]:

@@ -44,6 +44,22 @@ class MonitoringStore:
         with self._lock:
             return self._sessions.get(session_id)
 
+    def snapshots(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return [
+                {
+                    **session.public(),
+                    "events": [
+                        {
+                            **event,
+                            "signals": dict(event.get("signals", {})),
+                        }
+                        for event in session.events
+                    ],
+                }
+                for session in self._sessions.values()
+            ]
+
     def add_event(self, session: MonitoringSession, event: dict[str, Any]) -> None:
         with self._lock:
             session.events.append(event)

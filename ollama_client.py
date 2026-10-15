@@ -46,6 +46,36 @@ class OllamaAnalyzer:
                 break
         return "".join(parts).strip()
 
+    def analyze_dashboard(self, summary: dict[str, Any]) -> str:
+        prompt = (
+                "Analyze these aggregated machine-learning model monitoring "
+                "dashboard metrics. Explain notable trends and anomalies, describe "
+                "what the short-term linear forecast suggests without treating it "
+                "as certainty, and recommend actionable next steps. If there is "
+                "insufficient data, say so explicitly. Return concise plain text.\n\n"
+                f"Dashboard metrics: {json.dumps(summary, sort_keys=True)}"
+        )
+        response = requests.post(
+                f"{self.host}/api/generate",
+                json={"model": self.model, "prompt": prompt, "stream": True},
+                timeout=self.timeout,
+                stream=True,
+        )
+        response.raise_for_status()
+        parts: list[str] = []
+        for line in response.iter_lines(decode_unicode=True):
+                if not line:
+                    continue
+                payload = json.loads(line)
+                if not isinstance(payload, dict) or not isinstance(
+                    payload.get("response", ""), str
+                ):
+                    raise ValueError("Ollama returned a malformed generation chunk")
+                parts.append(payload.get("response", ""))
+                if payload.get("done"):
+                    break
+        return "".join(parts).strip()
+
     def generate_candidates(
         self, search_space: dict[str, Any], count: int
     ) -> list[dict[str, Any]]:
