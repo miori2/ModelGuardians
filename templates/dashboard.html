@@ -1,198 +1,210 @@
+
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark">
-  <title>ModelGuardians | Dashboard</title>
-  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <title>ModelGuardians Monitoring</title>
   <style>
-    :root {
-      color-scheme: dark;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #0c111b;
-      color: #ecf2ff;
-      font-synthesis: none;
-      text-rendering: optimizeLegibility;
+    body {
+      font-family: system-ui, Segoe UI, sans-serif;
+      background: #111a27;
+      color: #e7edf7;
+      margin: 0;
+      padding: 24px;
     }
-    * { box-sizing: border-box; }
-    body { margin: 0; min-width: 320px; }
-    header, main { width: min(1180px, calc(100% - 40px)); margin: 0 auto; }
-    header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 34px 0 26px; }
-    h1, h2, p { margin-top: 0; }
-    h1 { margin-bottom: 7px; font-size: clamp(1.6rem, 3vw, 2.1rem); letter-spacing: -0.04em; }
-    h2 { margin-bottom: 18px; font-size: 1.02rem; }
-    .muted, .subheading { color: #9ca9be; }
-    .subheading { margin-bottom: 0; font-size: .94rem; }
-    .toolbar { display: flex; align-items: center; gap: 10px; }
-    select, button { min-height: 40px; border: 1px solid #303c50; border-radius: 8px; background: #151e2c; color: #ecf2ff; padding: 0 12px; font: inherit; }
-    button { cursor: pointer; font-weight: 600; }
-    button:hover, select:hover { border-color: #788ba9; }
-    button:disabled { cursor: wait; opacity: .6; }
-    main { padding-bottom: 48px; }
-    .cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 16px; }
-    .card, .panel { border: 1px solid #222e40; border-radius: 12px; background: #111a27; }
-    .card { padding: 18px; }
-    .card-label { margin-bottom: 9px; color: #9ca9be; font-size: .83rem; }
-    .card-value { font-size: 1.8rem; font-weight: 700; letter-spacing: -0.04em; }
-    .grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(280px, 1fr); gap: 16px; margin-bottom: 16px; }
-    .panel { min-width: 0; padding: 20px; }
-    .plot { min-height: 320px; }
-    .insight { min-height: 100px; margin: 0; color: #c8d5e9; line-height: 1.65; white-space: pre-wrap; }
-    .status { padding: 12px 14px; border: 1px solid #303c50; border-radius: 8px; color: #b9c7dc; background: #151e2c; }
-    .status.error { color: #ffb4aa; border-color: #713e42; }
-    .footer { margin: 14px 2px 0; color: #7e8ba0; font-size: .8rem; }
-    @media (max-width: 760px) {
-      header { align-items: flex-start; flex-direction: column; }
-      .toolbar { width: 100%; }
-      select { flex: 1; min-width: 0; }
-      .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .grid { grid-template-columns: 1fr; }
-      .plot { min-height: 280px; }
+
+    h1 { margin-top: 0; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+    }
+
+    .card {
+      background: #1a2636;
+      border: 1px solid #2c3b50;
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    .metric {
+      font-size: 28px;
+      font-weight: 700;
+    }
+
+    .muted { color: #9eb0c8; }
+    .critical { color: #ff8178; }
+    .warning { color: #ffd166; }
+
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .event {
+      border-top: 1px solid #2c3b50;
+      padding: 12px 0;
+    }
+
+    button {
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 0;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
-  <header>
-    <div>
-      <h1>ModelGuardians</h1>
-      <p class="subheading">Live model health, trends, and tuning performance</p>
+  <h1>ModelGuardians</h1>
+
+  <p class="muted">
+    Monitoring and alert prototype. Refreshes every 5 seconds.
+  </p>
+
+  <div class="grid">
+    <div class="card">
+      <div class="muted">Events</div>
+      <div class="metric" id="events">0</div>
     </div>
-    <div class="toolbar">
-      <label class="muted" for="session-filter">Scope</label>
-      <select id="session-filter" aria-label="Filter by monitoring session">
-        <option value="">All sessions</option>
-      </select>
-      <button id="refresh" type="button">Refresh</button>
+
+    <div class="card">
+      <div class="muted">Anomalies</div>
+      <div class="metric" id="anomalies">0</div>
     </div>
-  </header>
-  <main>
-    <section class="cards" aria-label="Monitoring summary">
-      <div class="card"><div class="card-label">Monitoring sessions</div><div class="card-value" id="session-count">—</div></div>
-      <div class="card"><div class="card-label">Observed events</div><div class="card-value" id="event-count">—</div></div>
-      <div class="card"><div class="card-label">Anomalies</div><div class="card-value" id="anomaly-count">—</div></div>
-      <div class="card"><div class="card-label">Drift signals</div><div class="card-value" id="drift-count">—</div></div>
-    </section>
-    <div id="load-status" class="status" role="status">Loading monitoring data…</div>
-    <section class="grid" style="margin-top: 16px">
-      <article class="panel">
-        <h2>Observed signal and short-term forecast</h2>
-        <div id="monitoring-chart" class="plot" aria-label="Observed signal and forecast chart"></div>
-      </article>
-      <article class="panel">
-        <h2>LLM-assisted analytics</h2>
-        <p class="muted">Generate an explanation from aggregated monitoring metrics and recent signals.</p>
-        <button id="insights-button" type="button">Generate insights</button>
-        <p id="insight" class="insight" style="margin-top: 16px" aria-live="polite">Insights are generated on demand using your configured Ollama model.</p>
-      </article>
-    </section>
-    <section class="panel">
-      <h2>Hyperparameter tuning results</h2>
-      <div id="tuning-chart" class="plot" aria-label="Tuning trial metrics chart"></div>
-      <p class="footer">Forecasts use a simple linear trend over observed event means and are indicative, not a guarantee.</p>
-    </section>
-  </main>
+
+    <div class="card">
+      <div class="muted">Drift events</div>
+      <div class="metric" id="drifts">0</div>
+    </div>
+
+    <div class="card">
+      <div class="muted">Active alerts</div>
+      <div class="metric" id="alerts">0</div>
+    </div>
+
+    <div class="card">
+      <div class="muted">Predictive warnings</div>
+      <div class="metric" id="predictions">0</div>
+    </div>
+  </div>
+
+  <h2>Observed signal and short-term forecast</h2>
+
+  <div id="monitoringChart" style="height: 320px; margin-bottom: 18px;"></div>
+
+  <button id="generateInsights" type="button">Generate insights</button>
+
+  <h2>Recent events and alerts</h2>
+
+  <div class="card" id="eventList">
+    No events yet.
+  </div>
+
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script>
-    const sessionFilter = document.getElementById("session-filter");
-    const loadStatus = document.getElementById("load-status");
-    const insightText = document.getElementById("insight");
-    const refreshButton = document.getElementById("refresh");
-    let refreshInProgress = false;
-    function showPlotUnavailable(element, message) {
-      element.textContent = message;
-      element.classList.add("muted");
-    }
-
-    function renderMonitoring(data) {
-      if (window.Plotly) {
-        Plotly.react(
-          "monitoring-chart",
-          data.monitoring_figure.data,
-          data.monitoring_figure.layout,
-          { responsive: true, displaylogo: false }
-        );
-      } else {
-        showPlotUnavailable(document.getElementById("monitoring-chart"), "Interactive charts are unavailable. Check the connection to the Plotly CDN.");
-      }
-    }
-
-    function renderTuning(data) {
-      if (!window.Plotly) {
-        showPlotUnavailable(document.getElementById("tuning-chart"), "Interactive charts are unavailable. Check the connection to the Plotly CDN.");
-        return;
-      }
-      Plotly.react(
-        "tuning-chart",
-        data.tuning_figure.data,
-        data.tuning_figure.layout,
-        { responsive: true, displaylogo: false }
-      );
-    }
-
     async function refresh() {
-      if (refreshInProgress) return;
-      refreshInProgress = true;
-      refreshButton.disabled = true;
-      loadStatus.classList.remove("error");
-      loadStatus.textContent = "Loading monitoring data…";
-      const query = sessionFilter.value
-        ? `?session_id=${encodeURIComponent(sessionFilter.value)}`
-        : "";
       try {
-        const response = await fetch(`/api/dashboard${query}`);
+        const response = await fetch("/api/dashboard");
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Unable to load dashboard data");
-        const selected = sessionFilter.value;
-        const options = data.sessions.map(session =>
-          `<option value="${escapeHtml(session.id)}">${escapeHtml(session.model_name)} · ${escapeHtml(session.id.slice(0, 8))}</option>`
-        ).join("");
-        sessionFilter.innerHTML = `<option value="">All sessions</option>${options}`;
-        if (selected) sessionFilter.value = selected;
-        document.getElementById("session-count").textContent = data.summary.session_count;
-        document.getElementById("event-count").textContent = data.summary.event_count;
-        document.getElementById("anomaly-count").textContent = data.summary.anomaly_count;
-        document.getElementById("drift-count").textContent = data.summary.drift_count;
-        renderMonitoring(data);
-        renderTuning(data);
-        loadStatus.textContent = `Updated ${new Date().toLocaleTimeString()} · ${data.summary.tuning_job_count} tuning jobs`;
+
+        if (!response.ok) {
+          throw new Error(
+            data.error || "Dashboard request failed"
+          );
+        }
+
+        document.getElementById("events").textContent =
+          data.summary.event_count;
+
+        document.getElementById("anomalies").textContent =
+          data.summary.anomaly_count;
+
+        document.getElementById("drifts").textContent =
+          data.summary.drift_count;
+
+        document.getElementById("alerts").textContent =
+          data.summary.active_alert_count;
+
+        document.getElementById("predictions").textContent =
+          data.summary.predictive_warning_count;
+
+        if (data.monitoring_figure && data.monitoring_figure.data && data.monitoring_figure.data.length) {
+          Plotly.newPlot("monitoringChart", data.monitoring_figure.data, data.monitoring_figure.layout, {responsive: true});
+        }
+
+        const list = document.getElementById("eventList");
+
+        if (!data.events.length) {
+          list.textContent = "No events yet.";
+          return;
+        }
+
+        list.replaceChildren();
+
+        data.events
+          .slice()
+          .reverse()
+          .slice(0, 30)
+          .forEach(event => {
+            const item = document.createElement("div");
+            item.className = "event";
+
+            const title = document.createElement("strong");
+
+            title.textContent =
+              `${event.model_name || "model"} · ` +
+              `${event.alert?.severity || "unknown"} · ` +
+              `${event.alert?.alert_type || "event"}`;
+
+            if (event.alert?.severity === "critical") {
+              title.className = "critical";
+            } else if (event.alert?.severity === "warning") {
+              title.className = "warning";
+            }
+
+            const details = document.createElement("pre");
+
+            details.textContent = JSON.stringify({
+              timestamp: event.timestamp,
+              metrics: event.metrics,
+              signals: event.signals,
+              prediction: event.prediction,
+              diagnosis: event.diagnosis,
+              alert: event.alert
+            }, null, 2);
+
+            item.append(title, details);
+            list.append(item);
+          });
+
       } catch (error) {
-        loadStatus.classList.add("error");
-        loadStatus.textContent = error.message;
-      } finally {
-        refreshInProgress = false;
-        refreshButton.disabled = false;
+        document.getElementById("eventList").textContent =
+          error.message;
       }
     }
 
-    function escapeHtml(value) {
-      return String(value).replace(/[&<>"']/g, char => ({
-        "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
-      })[char]);
-    }
-
-    refreshButton.addEventListener("click", refresh);
-    sessionFilter.addEventListener("change", refresh);
-    window.setInterval(refresh, 15000);
-    document.getElementById("insights-button").addEventListener("click", async event => {
-      const button = event.currentTarget;
-      button.disabled = true;
-      insightText.textContent = "Analyzing aggregate metrics with Ollama…";
+    document.getElementById("generateInsights").addEventListener("click", async () => {
       try {
         const response = await fetch("/api/dashboard/insights", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: sessionFilter.value || null })
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({})
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Unable to generate insights");
-        insightText.textContent = data.insight || "The configured LLM returned an empty analysis.";
+        const insight = document.createElement("pre");
+        insight.textContent = response.ok ? data.insight : data.error || "Could not load insights";
+        const list = document.getElementById("eventList");
+        list.appendChild(insight);
       } catch (error) {
-        insightText.textContent = error.message;
-      } finally {
-        button.disabled = false;
+        const list = document.getElementById("eventList");
+        list.insertAdjacentHTML("beforeend", `<pre>${error.message}</pre>`);
       }
     });
+
     refresh();
+    setInterval(refresh, 5000);
   </script>
 </body>
 </html>
