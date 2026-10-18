@@ -122,6 +122,64 @@ class TuningApiTests(unittest.TestCase):
             400,
         )
 
+    def test_candidate_count_is_exact_or_rejected(self):
+        exact = {
+            **self.job_payload,
+            "max_trials": 2,
+            "search_space": {"depth": [2, 4]},
+        }
+        response = self.client.post("/tuning/jobs", json=exact)
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(len(response.get_json()["candidates"]), 2)
+        self.assertEqual(response.get_json()["max_trials"], 2)
+
+        insufficient = {
+            **exact,
+            "max_trials": 3,
+            "search_space": {"depth": [2]},
+        }
+        response = self.client.post("/tuning/jobs", json=insufficient)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("only 1 unique candidate configs", response.get_json()["error"])
+
+    def test_monitoring_rejects_non_finite_baseline_and_event_values(self):
+        for value in ("NaN", "Infinity", "-Infinity"):
+            payload = (
+                '{"model_name":"fraud-detector","baseline":{"mean":'
+                + value
+                + "}}"
+            )
+            response = self.client.post(
+                "/monitoring/sessions",
+                data=payload,
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("finite", response.get_json()["error"])
+
+        response = self.client.post(
+            "/monitoring/sessions",
+            data='{"model_name":"fraud-detector","baseline":{"mean":0.5,"stddev":Infinity}}',
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+        session = self.client.post(
+            "/monitoring/sessions", json={"model_name": "fraud-detector"}
+        ).get_json()
+        for payload in (
+            '{"features":[NaN]}',
+            '{"prediction":Infinity}',
+            '{"features":[' + ("9" * 400) + "]}",
+        ):
+            response = self.client.post(
+                f"/monitoring/sessions/{session['id']}/events",
+                data=payload,
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("finite", response.get_json()["error"])
+
     def test_existing_monitoring_ingestion_still_works(self):
         session = self.client.post(
             "/monitoring/sessions",

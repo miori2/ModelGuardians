@@ -41,6 +41,10 @@ class OllamaAnalyzer:
             if not line:
                 continue
             payload = json.loads(line)
+            if not isinstance(payload, dict) or not isinstance(
+                payload.get("response", ""), str
+            ):
+                raise ValueError("Ollama returned a malformed generation chunk")
             parts.append(payload.get("response", ""))
             if payload.get("done"):
                 break
