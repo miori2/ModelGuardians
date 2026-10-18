@@ -1,10 +1,12 @@
  
+import os
+
 from flask import Flask, jsonify, request
 import requests
 
 app = Flask(__name__)
 
-WORKER_URL = "http://127.0.0.1:5001"
+WORKER_URL = os.getenv("DEPLOYMENT_WORKER_URL", "http://127.0.0.1:5001").rstrip("/")
 
 # Temporary in-memory registries
 models = {}
@@ -96,7 +98,7 @@ def create_deployment():
             "error": "Deployment worker is unavailable or failed"
         }), 502
 
-    if result.get("status") != "succeeded":
+    if not isinstance(result, dict) or result.get("status") != "succeeded":
         return jsonify({
             "error": "Deployment did not succeed",
             "worker_result": result
@@ -170,7 +172,7 @@ def rollback_model(model_name):
             "error": "Rollback failed because the worker is unavailable"
         }), 502
 
-    if result.get("status") != "succeeded":
+    if not isinstance(result, dict) or result.get("status") != "succeeded":
         return jsonify({
             "error": "Rollback deployment did not succeed",
             "worker_result": result
@@ -189,4 +191,8 @@ def rollback_model(model_name):
 
 # Activates orchestrator when (python deployment_orchestrator.py) is run in the terminal
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    app.run(
+        host=os.getenv("DEPLOYMENT_HOST", "127.0.0.1"),
+        port=int(os.getenv("DEPLOYMENT_PORT", "5002")),
+        debug=False
+    )

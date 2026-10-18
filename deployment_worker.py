@@ -2,6 +2,7 @@
 # and simulates a successful deployment.
 
 
+import os
 from flask import Flask, jsonify, request
 import uuid
 
@@ -59,4 +60,8 @@ def get_deployment(deployment_id):
 
 # Activates the worker (type python deployment_worker.py in terminal) 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5001, debug=False)
+    app.run(
+        host=os.getenv("DEPLOYMENT_WORKER_HOST", "127.0.0.1"),
+        port=int(os.getenv("DEPLOYMENT_WORKER_PORT", "5001")),
+        debug=False
+    )

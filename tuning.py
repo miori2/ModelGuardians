@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import json
 import math
 import threading
@@ -118,31 +119,38 @@ def _candidate_is_valid(
 def _fallback_candidates(
     search_space: dict[str, dict[str, Any]], count: int
 ) -> list[dict[str, Any]]:
-    candidates: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for index in range(count):
-        candidate: dict[str, Any] = {}
-        categorical_multiplier = 1
-        for name, domain in search_space.items():
-            if domain["type"] == "categorical":
-                values = domain["values"]
-                candidate[name] = values[
-                    (index // categorical_multiplier) % len(values)
-                ]
-                categorical_multiplier *= len(values)
-            elif domain["type"] == "int":
-                candidate[name] = domain["min"] + (
-                    (domain["max"] - domain["min"]) * index // max(count - 1, 1)
+    domain_values: list[list[Any]] = []
+    names = list(search_space)
+    for domain in search_space.values():
+        if domain["type"] == "categorical":
+            values = domain["values"]
+        elif domain["type"] == "int":
+            lower, upper = domain["min"], domain["max"]
+            width = upper - lower
+            values = [
+                lower + (width * index // max(count - 1, 1))
+                for index in range(min(count, width + 1))
+            ]
+        elif domain["min"] == domain["max"]:
+            values = [domain["min"]]
+        else:
+            lower, upper = domain["min"], domain["max"]
+            values = [
+                lower * (1 - fraction) + upper * fraction
+                for fraction in (
+                    [0.0] if count == 1 else
+                    [index / (count - 1) for index in range(count)]
                 )
-            else:
-                fraction = index / max(count - 1, 1)
-                candidate[name] = (
-                    domain["min"] * (1 - fraction) + domain["max"] * fraction
-                )
-        key = _serialized(candidate)
-        if key not in seen:
-            candidates.append(candidate)
-            seen.add(key)
+            ]
+        domain_values.append(
+            list({_serialized(value): value for value in values}.values())
+        )
+
+    candidates = []
+    for values in itertools.product(*domain_values):
+        candidates.append(dict(zip(names, values)))
+        if len(candidates) == count:
+            break
     return candidates
 
 
@@ -243,8 +251,11 @@ class TuningStore:
     ) -> TuningJob:
         normalized_space = normalize_search_space(search_space)
         candidates = validated_candidates(proposed, normalized_space, max_trials)
-        if not candidates:
-            raise ValueError("search_space does not provide any unique candidate configs")
+        if len(candidates) != max_trials:
+            raise ValueError(
+                f"search_space can provide only {len(candidates)} unique candidate "
+                f"configs; max_trials={max_trials} requires {max_trials}"
+            )
         job = TuningJob(
             model_name=model_name,
             search_space=normalized_space,

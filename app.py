@@ -24,6 +24,15 @@ from ollama_client import OllamaAnalyzer
 from tuning import TuningStore, normalize_search_space
 
 
+def _finite_number(value: Any) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(float(value))
+    except OverflowError:
+        return False
+
+
 def dashboard_analytics(
     sessions: list[dict[str, Any]], selected_session_id: str | None
 ) -> dict[str, Any]:
@@ -303,6 +312,12 @@ def create_app(
             return jsonify({"error": "baseline must be an object"}), 400
         if baseline and "mean" not in baseline:
             return jsonify({"error": "baseline.mean is required"}), 400
+        if any(
+            isinstance(baseline.get(key), bool)
+            for key in ("mean", "stddev")
+            if key in baseline
+        ):
+            return jsonify({"error": "baseline mean and stddev must be numbers"}), 400
         try:
             normalized = (
                 {
@@ -312,8 +327,10 @@ def create_app(
                 if baseline
                 else {}
             )
-        except (TypeError, ValueError):
+        except (OverflowError, TypeError, ValueError):
             return jsonify({"error": "baseline mean and stddev must be numbers"}), 400
+        if not all(math.isfinite(value) for value in normalized.values()):
+            return jsonify({"error": "baseline mean and stddev must be finite numbers"}), 400
         if normalized.get("stddev", 0) < 0:
             return jsonify({"error": "baseline.stddev must not be negative"}), 400
         session = monitoring_store.create(model_name.strip(), normalized)
@@ -327,6 +344,20 @@ def create_app(
         event = request.get_json(silent=True)
         if not isinstance(event, dict):
             return jsonify({"error": "event must be a JSON object"}), 400
+        values = event.get("features", event.get("prediction"))
+        numeric_values = (
+            [values]
+            if isinstance(values, (int, float)) and not isinstance(values, bool)
+            else values
+            if isinstance(values, list)
+            else []
+        )
+        if any(
+            isinstance(value, (int, float)) and not isinstance(value, bool)
+            and not _finite_number(value)
+            for value in numeric_values
+        ):
+            return jsonify({"error": "event numeric values must be finite numbers"}), 400
         signals = evaluate_event(event, session.baseline)
         try:
             diagnosis = llm_analyzer.analyze(event, signals)
@@ -404,14 +435,17 @@ def create_app(
             )
             proposed = None
 
-        job = hyperparameter_tuning_store.create(
-            model_name=model_name.strip(),
-            search_space=search_space,
-            metric_name=metric_name.strip(),
-            direction=direction,
-            max_trials=max_trials,
-            proposed=proposed,
-        )
+        try:
+            job = hyperparameter_tuning_store.create(
+                model_name=model_name.strip(),
+                search_space=search_space,
+                metric_name=metric_name.strip(),
+                direction=direction,
+                max_trials=max_trials,
+                proposed=proposed,
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
         public_job = job.public()
         sources = {candidate["source"] for candidate in public_job["candidates"]}
         if "fallback" in sources:
