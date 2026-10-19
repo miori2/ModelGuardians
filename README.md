@@ -6,6 +6,28 @@ metrics, displaying those records in a dashboard, and simulating model
 deployment orchestration. It does not train models or deploy artifacts to a
 production runtime.
 
+## Project Title: [ModelGuardians]
+
+>>> Short, impactful description of what this machine learning project achieves, the problem it solves, and the core model/approach used.
+
+## 👥 Team Members & Contributions
+As per course requirements, all three members must actively collaborate and commit to this repository.
+*   **[Michael Orishagbemi] ([miori2])** - Role/Focus (e.g., Data Preprocessing, Feature Engineering)
+*   **[Christian Douglass] ([GitHub Username])** - Role/Focus (e.g., Model Architecture, Training Pipelines)
+*   **[Abdul Quayyum Yussuf] ([GitHub Username])** - Role/Focus (e.g., Hyperparameter Tuning, Evaluation & Deployment)
+
+---
+
+## 🚀 Live Demo
+*   **Application URL:** [Insert Link to Live App, e.g., Hugging Face Spaces / Streamlit Sharing / Vercel]
+*   *Note: This live demo must be fully functional and accessible during the live project presentation.*
+
+### 🎥 Project Walkthrough
+![Project Demo Walkthrough](path/to/your/demo.gif)
+*(Ensure your `demo.gif` is added to the repository and correctly linked above before the final submission deadline)*
+
+---
+
 ## Requirements and installation
 
 - Python 3.10 or newer (the source uses Python 3.10 union-type syntax; the
