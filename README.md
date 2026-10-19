@@ -6,10 +6,6 @@ metrics, displaying those records in a dashboard, and simulating model
 deployment orchestration. It does not train models or deploy artifacts to a
 production runtime.
 
-## Project Title: [ModelGuardians]
-
->>> Short, impactful description of what this machine learning project achieves, the problem it solves, and the core model/approach used.
-
 ## 👥 Team Members & Contributions
 As per course requirements, all three members must actively collaborate and commit to this repository.
 *   **[Michael Orishagbemi] ([miori2])** - Role/Focus (e.g., Data Preprocessing, Feature Engineering)
