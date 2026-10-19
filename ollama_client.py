@@ -40,20 +40,21 @@ class OllamaAnalyzer:
             timeout=self.timeout,
         )
         response.raise_for_status()
+        parts: list[str] = []
+        for line in response.iter_lines(decode_unicode=True):
+            if not line:
+                continue
+            payload = json.loads(line)
+            if not isinstance(payload, dict) or not isinstance(
+                payload.get("response", ""), str
+            ):
+                raise ValueError("Ollama returned a malformed generation chunk")
+            parts.append(payload.get("response", ""))
+            if payload.get("done"):
+                break
+        return "".join(parts).strip()
 
-        payload = response.json()
-        answer = payload.get("response")
-
-        if not isinstance(answer, str):
-            raise ValueError("Ollama returned a malformed response")
-
-        return answer.strip()
-
-    def analyze(
-        self,
-        event: dict[str, Any],
-        signals: dict[str, Any],
-    ) -> str:
+    def analyze_dashboard(self, summary: dict[str, Any]) -> str:
         prompt = (
             "Analyze this model monitoring event. Explain only what "
             "the evidence supports, identify possible anomaly or drift "

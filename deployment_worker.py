@@ -1,6 +1,7 @@
 
 """Prototype deployment worker. No real model is loaded."""
 
+import os
 from flask import Flask, jsonify, request
 import os
 import uuid
@@ -67,7 +68,7 @@ def get_deployment(deployment_id):
 
 if __name__ == "__main__":
     app.run(
-        host=os.getenv("WORKER_HOST", "127.0.0.1"),
-        port=int(os.getenv("WORKER_PORT", "5001")),
-        debug=False,
+        host=os.getenv("DEPLOYMENT_WORKER_HOST", "127.0.0.1"),
+        port=int(os.getenv("DEPLOYMENT_WORKER_PORT", "5001")),
+        debug=False
     )

@@ -1,17 +1,13 @@
-
-"""Deployment orchestrator with alert policy and rollback support."""
-
+ 
 import os
 
+from flask import Flask, jsonify, request
 import requests
 from flask import Flask, jsonify, request
 
 app = Flask(__name__)
 
-WORKER_URL = os.getenv(
-    "WORKER_URL",
-    "http://127.0.0.1:5001",
-)
+WORKER_URL = os.getenv("DEPLOYMENT_WORKER_URL", "http://127.0.0.1:5001").rstrip("/")
 
 # Prototype-only in-memory state.
 models = {}
@@ -105,19 +101,11 @@ def _send_deployment(model_name, version):
             502,
         )
 
-    if result.get("status") != "succeeded":
-        return None, (
-            jsonify({
-                "error": "Deployment did not succeed",
-                "worker_result": result,
-            }),
-            502,
-        )
-
-    previous = active_versions.get(model_name)
-
-    if previous and previous != version:
-        last_known_good[model_name] = previous
+    if not isinstance(result, dict) or result.get("status") != "succeeded":
+        return jsonify({
+            "error": "Deployment did not succeed",
+            "worker_result": result
+        }), 502
 
     active_versions[model_name] = version
     deployment_history.append(result)
@@ -231,7 +219,7 @@ def receive_alert():
             "error": "severity must be info, warning, or critical"
         }), 400
 
-    if not isinstance(alert_type, str) or not alert_type.strip():
+    if not isinstance(result, dict) or result.get("status") != "succeeded":
         return jsonify({
             "error": "alert_type is required"
         }), 400
@@ -285,7 +273,7 @@ def list_alerts():
 
 if __name__ == "__main__":
     app.run(
-        host=os.getenv("ORCHESTRATOR_HOST", "127.0.0.1"),
-        port=int(os.getenv("ORCHESTRATOR_PORT", "5002")),
-        debug=False,
+        host=os.getenv("DEPLOYMENT_HOST", "127.0.0.1"),
+        port=int(os.getenv("DEPLOYMENT_PORT", "5002")),
+        debug=False
     )

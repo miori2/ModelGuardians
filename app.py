@@ -26,90 +26,13 @@ from ollama_client import OllamaAnalyzer
 from tuning import TuningStore, normalize_search_space
 
 
-def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _finite(value: Any) -> bool:
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(float(value))
-    )
-
-
-def _forecast_window(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    values: list[float] = []
-    for event in events:
-        observed = event.get("signals", {}).get("observed_mean")
-        if _finite(observed):
-            values.append(float(observed))
-
-    if not values:
-        return []
-
-    current = max(values[-1], values[-1] * 1.05 if values[-1] >= 0 else values[-1] * 0.95)
-    slope = 0.0
-    if len(values) > 1:
-        slope = values[-1] - values[-2]
-
-    forecast = []
-    for offset in range(3):
-        forecast_mean = current + slope * (offset + 1)
-        forecast.append(
-            {
-                "step": offset + 1,
-                "observed_mean": current if offset == 0 else current + slope * offset,
-                "forecast_mean": forecast_mean,
-            }
-        )
-
-    return forecast
-
-
-def _monitoring_figure(events: list[dict[str, Any]]) -> dict[str, Any]:
-    x_values = []
-    observed = []
-    for idx, event in enumerate(events):
-        observed_mean = event.get("signals", {}).get("observed_mean")
-        if _finite(observed_mean):
-            x_values.append(str(idx + 1))
-            observed.append(float(observed_mean))
-
-    if not observed:
-        return {"data": [], "layout": {"title": "Observed signal and short-term forecast"}}
-
-    trend = observed[:]
-    if len(trend) > 1:
-        slope = trend[-1] - trend[-2]
-        trend += [trend[-1] + slope * (step + 1) for step in range(3)]
-        x_forecast = [*x_values, *[str(len(x_values) + step) for step in range(1, 4)]]
-    else:
-        trend = observed + [observed[-1]] * 3
-        x_forecast = [*x_values, *[str(len(x_values) + step) for step in range(1, 4)]]
-
-    return {
-        "data": [
-            {
-                "type": "scatter",
-                "mode": "lines+markers",
-                "name": "Observed mean",
-                "x": x_values,
-                "y": observed,
-            },
-            {
-                "type": "scatter",
-                "mode": "lines",
-                "name": "Linear forecast",
-                "x": x_forecast,
-                "y": trend,
-            },
-        ],
-        "layout": {
-            "title": "Observed signal and short-term forecast",
-            "height": 320,
-        },
-    }
+def _finite_number(value: Any) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(float(value))
+    except OverflowError:
+        return False
 
 
 def dashboard_analytics(
@@ -342,11 +265,15 @@ def create_app(
         baseline = body.get("baseline", {})
 
         if not isinstance(baseline, dict):
-            return jsonify({
-                "error": "baseline must be an object"
-            }), 400
-
-        # Accept named baselines or the legacy mean/stddev format.
+            return jsonify({"error": "baseline must be an object"}), 400
+        if baseline and "mean" not in baseline:
+            return jsonify({"error": "baseline.mean is required"}), 400
+        if any(
+            isinstance(baseline.get(key), bool)
+            for key in ("mean", "stddev")
+            if key in baseline
+        ):
+            return jsonify({"error": "baseline mean and stddev must be numbers"}), 400
         try:
             if "metrics" in baseline:
                 if not isinstance(baseline["metrics"], dict):
@@ -385,47 +312,16 @@ def create_app(
                 normalized = {
                     "metrics": normalized_metrics
                 }
-
-            elif baseline:
-                mean = baseline.get("mean")
-                stddev = baseline.get("stddev", 0)
-
-                if (
-                    not _finite(mean)
-                    or not _finite(stddev)
-                    or float(stddev) < 0
-                ):
-                    raise ValueError(
-                        "baseline mean/stddev must be finite numbers "
-                        "and stddev non-negative"
-                    )
-
-                normalized = {
-                    "mean": float(mean),
-                    "stddev": float(stddev),
-                }
-
-            else:
-                normalized = {}
-
-        except (ValueError, TypeError) as exc:
-            return jsonify({"error": str(exc)}), 400
-
-        thresholds = body.get("thresholds", {})
-
-        if not isinstance(thresholds, dict):
-            return jsonify({
-                "error": "thresholds must be an object"
-            }), 400
-
-        session = monitoring_store.create(
-            model_name.strip(),
-            normalized,
-        )
-
-        # Prototype: keep thresholds with the session baseline.
-        session.baseline["_thresholds"] = thresholds
-
+                if baseline
+                else {}
+            )
+        except (OverflowError, TypeError, ValueError):
+            return jsonify({"error": "baseline mean and stddev must be numbers"}), 400
+        if not all(math.isfinite(value) for value in normalized.values()):
+            return jsonify({"error": "baseline mean and stddev must be finite numbers"}), 400
+        if normalized.get("stddev", 0) < 0:
+            return jsonify({"error": "baseline.stddev must not be negative"}), 400
+        session = monitoring_store.create(model_name.strip(), normalized)
         return jsonify(session.public()), 201
 
     @app.post("/monitoring/sessions/<session_id>/events")
@@ -440,27 +336,21 @@ def create_app(
         event = request.get_json(silent=True)
 
         if not isinstance(event, dict):
-            return jsonify({
-                "error": "event must be a JSON object"
-            }), 400
-
-        metrics = event.get("metrics")
-
-        if metrics is not None:
-            if not isinstance(metrics, dict):
-                return jsonify({
-                    "error": "metrics must be an object"
-                }), 400
-
-            for name, value in metrics.items():
-                if not isinstance(name, str) or not _finite(value):
-                    return jsonify({
-                        "error": (
-                            f"metric {name!r} must be a finite number"
-                        )
-                    }), 400
-
-        # 1. Detect anomalies using Python statistical rules.
+            return jsonify({"error": "event must be a JSON object"}), 400
+        values = event.get("features", event.get("prediction"))
+        numeric_values = (
+            [values]
+            if isinstance(values, (int, float)) and not isinstance(values, bool)
+            else values
+            if isinstance(values, list)
+            else []
+        )
+        if any(
+            isinstance(value, (int, float)) and not isinstance(value, bool)
+            and not _finite_number(value)
+            for value in numeric_values
+        ):
+            return jsonify({"error": "event numeric values must be finite numbers"}), 400
         signals = evaluate_event(event, session.baseline)
 
         # 2. Predict possible future threshold violations.
@@ -702,16 +592,25 @@ def create_app(
             )
             proposed = None
 
-        job = hyperparameter_tuning_store.create(
-            model_name.strip(),
-            search_space,
-            metric_name.strip(),
-            direction,
-            max_trials,
-            proposed,
-        )
-
-        return jsonify(job.public()), 201
+        try:
+            job = hyperparameter_tuning_store.create(
+                model_name=model_name.strip(),
+                search_space=search_space,
+                metric_name=metric_name.strip(),
+                direction=direction,
+                max_trials=max_trials,
+                proposed=proposed,
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        public_job = job.public()
+        sources = {candidate["source"] for candidate in public_job["candidates"]}
+        if "fallback" in sources:
+            app.logger.warning(
+                "Tuning job %s used fallback candidates for some or all trials",
+                job.id,
+            )
+        return jsonify(public_job), 201
 
     @app.get("/tuning/jobs/<job_id>")
     def get_tuning_job(job_id: str):
