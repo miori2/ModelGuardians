@@ -7,11 +7,11 @@ Machine Learning tool that is able to analyze when a model is working incorrectl
 
 
 ## 🚀 Live Demo
-*   **Application URL:** [Insert Link to Live App, e.g., Hugging Face Spaces / Streamlit Sharing / Vercel]
+*   **Application URL:** (https://silver-space-train-v55jwj49jjq26rj-5000.app.github.dev/dashboard)
 *   *Note: This live demo must be fully functional and accessible during the live project presentation.*
 
 ### 🎥 Project Walkthrough
-![Project Demo Walkthrough](path/to/your/demo.gif)
+![Project Demo Walkthrough]https://drive.google.com/file/d/1dycUKW-mhL9nzp2h5onYjDW5MginaetI/view?usp=sharing
 *(Ensure your `demo.gif` is added to the repository and correctly linked above before the final submission deadline)*
 
 ## 🛠️ Installation & Setup
