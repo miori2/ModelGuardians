@@ -9,8 +9,8 @@ production runtime.
 ## 👥 Team Members & Contributions
 As per course requirements, all three members must actively collaborate and commit to this repository.
 *   **[Michael Orishagbemi] ([miori2])** - Role/Focus (e.g., Data Preprocessing, Feature Engineering)
-*   **[Christian Douglass] ([GitHub Username])** - Role/Focus (e.g., Model Architecture, Training Pipelines)
-*   **[Abdul Quayyum Yussuf] ([GitHub Username])** - Role/Focus (e.g., Hyperparameter Tuning, Evaluation & Deployment)
+*   **[Christian Douglass] (@Ghostking223)** - Role/Focus (e.g., Model Architecture, Training Pipelines)
+*   **[Abdul Quayyum Yussuf] (@AYO-YUSSUF)** - Role/Focus (e.g., Hyperparameter Tuning, Evaluation & Deployment)
 
 ---
 
@@ -19,7 +19,7 @@ As per course requirements, all three members must actively collaborate and comm
 *   *Note: This live demo must be fully functional and accessible during the live project presentation.*
 
 ### 🎥 Project Walkthrough
-[Project demo walkthrough](https://drive.google.com/file/d/1dycUKW-mhL9nzp2h5onYjDW5MginaetI/view)
+[Project demo walkthrough](https://drive.google.com/file/d/1birLL1ERHqB5o1VElPBpEl6y-9rL5h5E/view?usp=sharing)
 *(Ensure your `demo.gif` is added to the repository and correctly linked above before the final submission deadline)*
 
 ---
