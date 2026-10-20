@@ -8,9 +8,9 @@ production runtime.
 
 ## 👥 Team Members & Contributions
 As per course requirements, all three members must actively collaborate and commit to this repository.
-*   **[Michael Orishagbemi] ([miori2])** - Role/Focus (e.g., Data Preprocessing, Feature Engineering)
-*   **[Christian Douglass] (@Ghostking223)** - Role/Focus (e.g., Model Architecture, Training Pipelines)
-*   **[Abdul Quayyum Yussuf] (@AYO-YUSSUF)** - Role/Focus (e.g., Hyperparameter Tuning, Evaluation & Deployment)
+*   **[Michael Orishagbemi] (@miori2)** - Role/Focus (Deployment Pipeline Orchestration, Ollama Anomaly Detection)
+*   **[Christian Douglass] (@Ghostking223)** - Role/Focus ( Model Monitoring/Architecture, Training Models)
+*   **[Abdul Quayyum Yussuf] (@AYO-YUSSUF)** - Role/Focus (Hyperparameter Tuning Automation System, Testing & Documentation)
 
 ---
 
