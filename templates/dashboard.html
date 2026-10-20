@@ -3,59 +3,53 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark">
   <title>ModelGuardians | Dashboard</title>
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <style>
-    :root {
-      color-scheme: dark;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #0c111b;
-      color: #ecf2ff;
-      font-synthesis: none;
-      text-rendering: optimizeLegibility;
-    }
+    :root { color-scheme: dark; font-family: system-ui, Segoe UI, sans-serif; }
     * { box-sizing: border-box; }
-    body { margin: 0; min-width: 320px; }
+    body { margin: 0; min-width: 320px; background: #111a27; color: #e7edf7; }
     header, main { width: min(1180px, calc(100% - 40px)); margin: 0 auto; }
-    header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 34px 0 26px; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 30px 0 22px; }
     h1, h2, p { margin-top: 0; }
-    h1 { margin-bottom: 7px; font-size: clamp(1.6rem, 3vw, 2.1rem); letter-spacing: -0.04em; }
-    h2 { margin-bottom: 18px; font-size: 1.02rem; }
-    .muted, .subheading { color: #9ca9be; }
+    h1 { margin-bottom: 6px; font-size: clamp(1.6rem, 3vw, 2.1rem); }
+    h2 { margin-bottom: 14px; font-size: 1.02rem; }
+    .muted, .subheading, .card-label { color: #9ca9be; }
     .subheading { margin-bottom: 0; font-size: .94rem; }
     .toolbar { display: flex; align-items: center; gap: 10px; }
     select, button { min-height: 40px; border: 1px solid #303c50; border-radius: 8px; background: #151e2c; color: #ecf2ff; padding: 0 12px; font: inherit; }
     button { cursor: pointer; font-weight: 600; }
-    button:hover, select:hover { border-color: #788ba9; }
     button:disabled { cursor: wait; opacity: .6; }
     main { padding-bottom: 48px; }
-    .cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 16px; }
-    .card, .panel { border: 1px solid #222e40; border-radius: 12px; background: #111a27; }
-    .card { padding: 18px; }
-    .card-label { margin-bottom: 9px; color: #9ca9be; font-size: .83rem; }
-    .card-value { font-size: 1.8rem; font-weight: 700; letter-spacing: -0.04em; }
-    .grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(280px, 1fr); gap: 16px; margin-bottom: 16px; }
-    .panel { min-width: 0; padding: 20px; }
-    .plot { min-height: 320px; }
-    .insight { min-height: 100px; margin: 0; color: #c8d5e9; line-height: 1.65; white-space: pre-wrap; }
-    .status { padding: 12px 14px; border: 1px solid #303c50; border-radius: 8px; color: #b9c7dc; background: #151e2c; }
+    .cards { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .card, .panel { min-width: 0; border: 1px solid #222e40; border-radius: 12px; background: #111a27; }
+    .card { padding: 16px; }
+    .card-label { margin-bottom: 8px; font-size: .82rem; }
+    .card-value { font-size: 1.7rem; font-weight: 700; }
+    .panel { padding: 20px; margin-bottom: 16px; }
+    .grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); gap: 16px; }
+    .plot { min-height: 300px; }
+    .status { padding: 12px 14px; border: 1px solid #303c50; border-radius: 8px; background: #151e2c; color: #c8d5e9; }
     .status.error { color: #ffb4aa; border-color: #713e42; }
-    h3 { margin: 18px 0 8px; font-size: .9rem; color: #9ca9be; text-transform: uppercase; letter-spacing: .04em; }
+    .insight { min-height: 70px; margin: 14px 0 0; color: #c8d5e9; line-height: 1.6; white-space: pre-wrap; }
+    .event { border-top: 1px solid #2c3b50; padding: 12px 0; }
+    .event pre { white-space: pre-wrap; overflow-wrap: anywhere; color: #c8d5e9; }
+    .critical { color: #ff8178; }
+    .warning { color: #ffd166; }
     .metric-list { display: grid; gap: 8px; }
-    .metric-row { display: grid; grid-template-columns: 200px 190px 1fr; gap: 14px; padding: 12px 14px; border: 1px solid #222e40; border-radius: 8px; background: #151e2c; align-items: baseline; }
-    .metric-name { font-weight: 600; }
-    .metric-value { color: #ffd166; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .metric-row { display: grid; grid-template-columns: 190px 170px 1fr; gap: 12px; padding: 12px; border: 1px solid #222e40; border-radius: 8px; background: #151e2c; }
+    .metric-value { color: #ffd166; font-weight: 700; }
     .metric-text { color: #c8d5e9; line-height: 1.5; font-size: .92rem; }
-    @media (max-width: 760px) { .metric-row { grid-template-columns: 1fr; gap: 4px; } }
-    .footer { margin: 14px 2px 0; color: #7e8ba0; font-size: .8rem; }
-    @media (max-width: 760px) {
+    h3 { margin: 18px 0 8px; font-size: .9rem; color: #9ca9be; }
+    .footer { margin: 12px 0 0; color: #7e8ba0; font-size: .8rem; }
+    @media (max-width: 900px) { .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    @media (max-width: 700px) {
       header { align-items: flex-start; flex-direction: column; }
       .toolbar { width: 100%; }
       select { flex: 1; min-width: 0; }
       .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .grid { grid-template-columns: 1fr; }
-      .plot { min-height: 280px; }
+      .metric-row { grid-template-columns: 1fr; gap: 4px; }
     }
   </style>
 </head>
@@ -63,124 +57,139 @@
   <header>
     <div>
       <h1>ModelGuardians</h1>
-      <p class="subheading">Live model health, trends, and tuning performance</p>
+      <p class="subheading">Model monitoring, fraud predictions, alerts, and tuning results.</p>
     </div>
     <div class="toolbar">
-      <label class="muted" for="session-filter">Scope</label>
-      <select id="session-filter" aria-label="Filter by monitoring session">
-        <option value="">All sessions</option>
-      </select>
-      <button id="refresh" type="button">Refresh</button>
+      <label class="muted" for="session-filter">Session</label>
+      <select id="session-filter"><option value="">All sessions</option></select>
+      <button id="refresh-button" type="button">Refresh</button>
     </div>
   </header>
   <main>
     <section class="cards" aria-label="Monitoring summary">
-      <div class="card"><div class="card-label">Monitoring sessions</div><div class="card-value" id="session-count">—</div></div>
-      <div class="card"><div class="card-label">Observed events</div><div class="card-value" id="event-count">—</div></div>
+      <div class="card"><div class="card-label">Sessions</div><div class="card-value" id="session-count">—</div></div>
+      <div class="card"><div class="card-label">Events</div><div class="card-value" id="event-count">—</div></div>
       <div class="card"><div class="card-label">Anomalies</div><div class="card-value" id="anomaly-count">—</div></div>
       <div class="card"><div class="card-label">Drift signals</div><div class="card-value" id="drift-count">—</div></div>
+      <div class="card"><div class="card-label">Active alerts</div><div class="card-value" id="alert-count">—</div></div>
+      <div class="card"><div class="card-label">Predictive warnings</div><div class="card-value" id="warning-count">—</div></div>
     </section>
-    <div id="load-status" class="status" role="status">Loading monitoring data…</div>
-    <div id="model-status" class="status" role="status" style="margin-top: 10px">Fraud detection model status is loading…</div>
-    <section class="grid" style="margin-top: 16px">
+    <div id="load-status" class="status" role="status">Loading dashboard data…</div>
+    <div id="model-status" class="status" role="status" style="margin-top:10px">Fraud model status is loading…</div>
+    <section class="grid" style="margin-top:16px">
       <article class="panel">
         <h2>Observed signal and short-term forecast</h2>
         <div id="monitoring-chart" class="plot" aria-label="Observed signal and forecast chart"></div>
-        <p class="footer">With the fraud detector enabled, the observed signal is each prediction's fraud probability (faint dots), and the yellow line is its 20-event rolling average. The forecast extends that recent trend; it is not a separate model prediction.</p>
+        <p class="footer">The forecast is a linear extrapolation of recent observations, not a separate model prediction.</p>
       </article>
       <article class="panel">
         <h2>LLM-assisted analytics</h2>
-        <p class="muted">Generate an explanation from aggregated monitoring metrics and recent signals.</p>
+        <p class="muted">Generate an explanation from aggregated metrics and recent events.</p>
         <button id="insights-button" type="button">Generate insights</button>
-        <p id="insight" class="insight" style="margin-top: 16px" aria-live="polite">Insights are generated on demand using your configured Ollama model.</p>
+        <p id="insight" class="insight" aria-live="polite">Insights are generated on demand using the configured Ollama model.</p>
       </article>
     </section>
-    <section class="panel" id="explanations-panel" hidden style="margin-bottom: 16px">
+    <section class="panel" id="explanations-panel" hidden>
       <h2>Metric explanations</h2>
       <div id="explanations" aria-live="polite"></div>
     </section>
-    <section class="panel">
-      <h2>Hyperparameter tuning results</h2>
-      <div id="tuning-chart" class="plot" aria-label="Tuning trial metrics chart"></div>
-      <p class="footer">Forecasts use a simple linear trend over observed event means and are indicative, not a guarantee.</p>
+    <section class="grid">
+      <article class="panel">
+        <h2>Recent events and alerts</h2>
+        <div id="event-list">No events yet.</div>
+      </article>
+      <article class="panel">
+        <h2>Hyperparameter tuning results</h2>
+        <div id="tuning-chart" class="plot" aria-label="Tuning trial metrics chart"></div>
+      </article>
     </section>
   </main>
   <script>
     const sessionFilter = document.getElementById("session-filter");
     const loadStatus = document.getElementById("load-status");
     const insightText = document.getElementById("insight");
-    const refreshButton = document.getElementById("refresh");
-    let refreshInProgress = false;
-    function showPlotUnavailable(element, message) {
-      element.textContent = message;
-      element.classList.add("muted");
+    const refreshButton = document.getElementById("refresh-button");
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, char => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
+      })[char]);
     }
 
-    function renderMonitoring(data) {
-      if (window.Plotly) {
-        Plotly.react(
-          "monitoring-chart",
-          data.monitoring_figure.data,
-          data.monitoring_figure.layout,
-          { responsive: true, displaylogo: false }
-        );
-      } else {
-        showPlotUnavailable(document.getElementById("monitoring-chart"), "Interactive charts are unavailable. Check the connection to the Plotly CDN.");
+    function renderFigure(element, figure) {
+      if (window.Plotly && figure) {
+        Plotly.react(element, figure.data || [], figure.layout || {}, {responsive: true});
       }
     }
 
-    function renderTuning(data) {
-      if (!window.Plotly) {
-        showPlotUnavailable(document.getElementById("tuning-chart"), "Interactive charts are unavailable. Check the connection to the Plotly CDN.");
+    function renderEvents(events) {
+      const list = document.getElementById("event-list");
+      list.replaceChildren();
+      if (!events.length) {
+        list.textContent = "No events yet.";
         return;
       }
-      Plotly.react(
-        "tuning-chart",
-        data.tuning_figure.data,
-        data.tuning_figure.layout,
-        { responsive: true, displaylogo: false }
-      );
+      events.slice().reverse().slice(0, 30).forEach(event => {
+        const item = document.createElement("article");
+        item.className = "event";
+        const title = document.createElement("strong");
+        const severity = event.alert?.severity || "unknown";
+        title.className = severity === "critical" || severity === "warning" ? severity : "";
+        title.textContent = `${event.model_name || "model"} · ${severity} · ${event.alert?.alert_type || "event"}`;
+        const details = document.createElement("pre");
+        details.textContent = JSON.stringify({
+          timestamp: event.timestamp,
+          signals: event.signals,
+          prediction: event.prediction,
+          forecast: event.forecast,
+          diagnosis: event.diagnosis,
+          alert: event.alert,
+          pipeline: event.pipeline
+        }, null, 2);
+        item.append(title, details);
+        list.append(item);
+      });
     }
 
     async function refresh() {
-      if (refreshInProgress) return;
-      refreshInProgress = true;
       refreshButton.disabled = true;
-      loadStatus.classList.remove("error");
-      loadStatus.textContent = "Loading monitoring data…";
-      const query = sessionFilter.value
-        ? `?session_id=${encodeURIComponent(sessionFilter.value)}`
-        : "";
       try {
-        const response = await fetch(`/api/dashboard${query}`);
+        const params = new URLSearchParams();
+        if (sessionFilter.value) params.set("session_id", sessionFilter.value);
+        const response = await fetch(`/api/dashboard?${params}`);
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Unable to load dashboard data");
+
         const selected = sessionFilter.value;
-        const options = data.sessions.map(session =>
+        sessionFilter.innerHTML = `<option value="">All sessions</option>${data.sessions.map(session =>
           `<option value="${escapeHtml(session.id)}">${escapeHtml(session.model_name)} · ${escapeHtml(session.id.slice(0, 8))}</option>`
-        ).join("");
-        sessionFilter.innerHTML = `<option value="">All sessions</option>${options}`;
-        if (selected) sessionFilter.value = selected;
-        document.getElementById("session-count").textContent = data.summary.session_count;
-        document.getElementById("event-count").textContent = data.summary.event_count;
-        document.getElementById("anomaly-count").textContent = data.summary.anomaly_count;
-        document.getElementById("drift-count").textContent = data.summary.drift_count;
+        ).join("")}`;
+        sessionFilter.value = selected;
+        for (const [id, key] of [
+          ["session-count", "session_count"], ["event-count", "event_count"],
+          ["anomaly-count", "anomaly_count"], ["drift-count", "drift_count"],
+          ["alert-count", "active_alert_count"], ["warning-count", "predictive_warning_count"]
+        ]) {
+          document.getElementById(id).textContent = data.summary[key] ?? 0;
+        }
+
         const modelStatus = document.getElementById("model-status");
         if (data.fraud_model) {
-          const score = data.fraud_model.metrics.average_precision;
+          const model = data.fraud_model;
           modelStatus.textContent =
-            `${data.fraud_model.model_name} loaded · ${data.fraud_model.feature_count} features · test average precision ${score.toFixed(3)} · ${data.fraud_model.dataset_summary.row_count.toLocaleString()} dataset rows`;
+            `${model.model_name} loaded · ${model.feature_count} features · test average precision ${model.metrics.average_precision.toFixed(3)} · ${model.dataset_summary.row_count.toLocaleString()} dataset rows`;
         } else {
-          modelStatus.textContent = "Fraud detection model is not loaded. Train it with `python fraud_pipeline.py train`, then restart the app.";
+          modelStatus.textContent = "Fraud detection model is not loaded. Train it with python fraud_pipeline.py train, then restart the app.";
         }
-        renderMonitoring(data);
-        renderTuning(data);
+        renderFigure("monitoring-chart", data.monitoring_figure);
+        renderFigure("tuning-chart", data.tuning_figure);
+        renderEvents(data.events || []);
         loadStatus.textContent = `Updated ${new Date().toLocaleTimeString()} · ${data.summary.tuning_job_count} tuning jobs`;
+        loadStatus.classList.remove("error");
       } catch (error) {
-        loadStatus.classList.add("error");
         loadStatus.textContent = error.message;
+        loadStatus.classList.add("error");
       } finally {
-        refreshInProgress = false;
         refreshButton.disabled = false;
       }
     }
@@ -198,18 +207,12 @@
         <h3>${escapeHtml(group)}</h3>
         <div class="metric-list">${rows.map(row => `
           <div class="metric-row">
-            <div class="metric-name">${escapeHtml(row.metric)}</div>
+            <div>${escapeHtml(row.metric)}</div>
             <div class="metric-value">${escapeHtml(row.value)}</div>
             <div class="metric-text">${escapeHtml(row.explanation)}</div>
           </div>`).join("")}
         </div>`).join("");
       panel.hidden = false;
-    }
-
-    function escapeHtml(value) {
-      return String(value).replace(/[&<>"']/g, char => ({
-        "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
-      })[char]);
     }
 
     refreshButton.addEventListener("click", refresh);
@@ -222,16 +225,14 @@
       try {
         const response = await fetch("/api/dashboard/insights", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: sessionFilter.value || null })
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({session_id: sessionFilter.value || null})
         });
         const data = await response.json();
         renderExplanations(data.explanations);
-        if (!response.ok) {
-          insightText.textContent = `${data.error || "Unable to generate insights"}. Metric explanations are shown below.`;
-          return;
-        }
-        insightText.textContent = data.insight || "The configured LLM returned an empty analysis.";
+        insightText.textContent = response.ok
+          ? data.insight || "The configured LLM returned an empty analysis."
+          : `${data.error || "Unable to generate insights"}. Metric explanations are shown below.`;
       } catch (error) {
         insightText.textContent = error.message;
       } finally {

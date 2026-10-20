@@ -75,6 +75,29 @@ class DashboardApiTests(unittest.TestCase):
             self.client.get("/api/dashboard?session_id=missing").status_code, 404
         )
 
+    def test_dashboard_filter_excludes_other_sessions(self):
+        second = self.client.post(
+            "/monitoring/sessions", json={"model_name": "churn-model"}
+        ).get_json()
+        self.client.post(
+            f"/monitoring/sessions/{second['id']}/events",
+            json={"features": [0.9]},
+        )
+
+        all_data = self.client.get("/api/dashboard").get_json()
+        scoped = self.client.get(
+            f"/api/dashboard?session_id={self.session['id']}"
+        ).get_json()
+        self.assertEqual(all_data["summary"]["event_count"], 4)
+        self.assertEqual(scoped["summary"]["event_count"], 3)
+        self.assertEqual(scoped["summary"]["session_count"], 1)
+        self.assertTrue(
+            all(
+                event["session_id"] == self.session["id"]
+                for event in scoped["events"]
+            )
+        )
+
     def test_llm_insights_receive_aggregated_dashboard_metrics(self):
         response = self.client.post(
             "/api/dashboard/insights", json={"session_id": self.session["id"]}
@@ -106,6 +129,28 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn("Anomalies", metrics)
         self.assertIn("Drift signals", metrics)
         self.assertTrue(all(item["explanation"] for item in data["explanations"]))
+
+    def test_insights_reject_invalid_scope_and_unknown_session(self):
+        self.assertEqual(
+            self.client.post(
+                "/api/dashboard/insights", json={"session_id": 3}
+            ).status_code,
+            400,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/dashboard/insights", json={"session_id": "missing"}
+            ).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/dashboard/insights",
+                data="[]",
+                content_type="application/json",
+            ).status_code,
+            400,
+        )
 
 
 if __name__ == "__main__":
