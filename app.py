@@ -22,6 +22,7 @@ from flask import (
 from monitoring import MonitoringStore, evaluate_event
 from ollama_client import OllamaAnalyzer
 from tuning import TuningStore, normalize_search_space
+from fraud_model import FraudModel, load_fraud_model
 
 
 def dashboard_analytics(
@@ -102,6 +103,9 @@ def dashboard_analytics(
     }
 
 
+ROLLING_WINDOW = 20
+
+
 def monitoring_figure(
     events: list[dict[str, Any]], forecast: list[dict[str, float | int]]
 ) -> dict[str, Any]:
@@ -124,14 +128,16 @@ def monitoring_figure(
             ],
             y=[event["signals"]["observed_mean"] for event in observed],
             type="scatter",
-            mode="lines+markers",
+            mode="markers" if len(observed) > ROLLING_WINDOW else "lines+markers",
             name="Observed mean",
+            opacity=0.35 if len(observed) > ROLLING_WINDOW else 1,
             line={"color": "#67a5ff", "width": 2},
             marker={
+                "size": 5,
                 "color": [
                     "#ff786f" if event["signals"].get("anomaly") else "#67a5ff"
                     for event in observed
-                ]
+                ],
             },
         )
     )
@@ -155,6 +161,28 @@ def monitoring_figure(
                 line={"color": "#bb91ff", "width": 2, "dash": "dash"},
             )
         )
+    if len(observed) > 1:
+        values = [event["signals"]["observed_mean"] for event in observed]
+        rolling = [
+            sum(values[max(0, i - ROLLING_WINDOW + 1) : i + 1])
+            / len(values[max(0, i - ROLLING_WINDOW + 1) : i + 1])
+            for i in range(len(values))
+        ]
+        figure.add_trace(
+            go.Scatter(
+                x=[
+                    event["timestamp"]
+                    if isinstance(event.get("timestamp"), str) and event["timestamp"]
+                    else f"Event {index + 1}"
+                    for index, event in enumerate(observed)
+                ],
+                y=rolling,
+                type="scatter",
+                mode="lines",
+                name=f"Rolling average ({ROLLING_WINDOW} events)",
+                line={"color": "#ffd166", "width": 3},
+            )
+        )
     figure.update_layout(
         template="plotly_dark",
         paper_bgcolor="#111a27",
@@ -162,7 +190,7 @@ def monitoring_figure(
         font={"color": "#c8d5e9"},
         margin={"l": 48, "r": 18, "t": 12, "b": 48},
         xaxis={"title": "Event sequence", "gridcolor": "#263246"},
-        yaxis={"title": "Observed mean", "gridcolor": "#263246"},
+        yaxis={"title": "Fraud probability / observed signal", "gridcolor": "#263246"},
         legend={"orientation": "h", "y": -0.22},
     )
     return json.loads(figure.to_json())
@@ -195,6 +223,131 @@ def tuning_figure(jobs: list[dict[str, Any]]) -> dict[str, Any]:
     return json.loads(figure.to_json())
 
 
+def metric_explanations(
+    analytics: dict[str, Any],
+    jobs: list[dict[str, Any]],
+    fraud_model: dict[str, Any] | None,
+) -> list[dict[str, str]]:
+    """Plain-language explanation of every metric shown on the dashboard."""
+    summary = analytics["summary"]
+    events = analytics["events"]
+    items: list[dict[str, str]] = []
+
+    def add(group: str, metric: str, value: str, explanation: str) -> None:
+        items.append(
+            {"group": group, "metric": metric, "value": value, "explanation": explanation}
+        )
+
+    count = summary["event_count"]
+    add(
+        "Monitoring",
+        "Monitoring sessions",
+        str(summary["session_count"]),
+        f"{summary['session_count']} session(s) covering {summary['model_count']} model(s). "
+        "A session is one stream of predictions being watched.",
+    )
+    add(
+        "Monitoring",
+        "Observed events",
+        str(count),
+        "Predictions recorded so far. More events make the trends and rates below more reliable."
+        if count
+        else "No predictions have been recorded yet, so nothing can be analyzed.",
+    )
+    for key, label, meaning in (
+        ("anomaly_count", "Anomalies", "events whose signal was 3 or more standard deviations from the baseline"),
+        ("drift_count", "Drift signals", "events 2 or more standard deviations from the baseline, or unusually spread out"),
+    ):
+        value = summary[key]
+        rate = f" ({value / count:.1%} of events)" if count else ""
+        verdict = (
+            "None were flagged, so behavior matches the baseline."
+            if value == 0
+            else "Review these events; the model's output may be shifting from what it was trained on."
+        )
+        add("Monitoring", label, str(value), f"{value} {meaning}{rate}. {verdict}")
+
+    probabilities = [
+        event["signals"]["observed_mean"]
+        for event in events
+        if isinstance(event.get("signals"), dict)
+        and isinstance(event["signals"].get("observed_mean"), (int, float))
+    ]
+    if probabilities:
+        recent = probabilities[-20:]
+        mean_recent = sum(recent) / len(recent)
+        add(
+            "Observed signal",
+            "Recent average signal",
+            f"{mean_recent:.3f}",
+            f"Average of the last {len(recent)} observed values (fraud probability for the fraud model). "
+            "The yellow chart line shows this over time; a sustained move away from the baseline suggests drift.",
+        )
+    labelled = [e for e in events if e.get("actual") in (0, 1) and "predicted_class" in e]
+    if labelled:
+        correct = sum(e["predicted_class"] == e["actual"] for e in labelled)
+        add(
+            "Observed signal",
+            "Live accuracy",
+            f"{correct / len(labelled):.1%}",
+            f"{correct} of {len(labelled)} replayed predictions matched the true label. "
+            "This is measured on the events shown, not on the held-out test set.",
+        )
+    forecast = analytics["forecast"]
+    if forecast:
+        add(
+            "Observed signal",
+            "Short-term forecast",
+            f"{forecast[0]['observed_mean']:.3f} → {forecast[-1]['observed_mean']:.3f}",
+            "A straight-line trend extended over the next few events. It is indicative only; "
+            "it is not very informative when values jump between near 0 and near 1.",
+        )
+
+    if fraud_model:
+        metrics = fraud_model["metrics"]
+        descriptions = (
+            ("accuracy", "Accuracy", "share of all test predictions that were correct"),
+            ("precision", "Precision", "of the transactions flagged as fraud, the share that really were fraud"),
+            ("recall", "Recall", "of all real fraud, the share the model caught"),
+            ("f1", "F1 score", "balance of precision and recall"),
+            ("roc_auc", "ROC-AUC", "how well the model ranks fraud above legitimate cases (1.0 is perfect, 0.5 is chance)"),
+            ("average_precision", "Average precision", "precision averaged across all thresholds; the main tuning metric"),
+        )
+        for key, label, meaning in descriptions:
+            if isinstance(metrics.get(key), (int, float)):
+                add("Model (held-out test set)", label, f"{metrics[key]:.4f}", f"{meaning[0].upper()}{meaning[1:]}.")
+        matrix = metrics.get("confusion_matrix")
+        if matrix and len(matrix) == 2:
+            (tn, fp), (fn, tp) = matrix
+            add(
+                "Model (held-out test set)",
+                "Confusion matrix",
+                f"TN {tn:,} · FP {fp:,} · FN {fn:,} · TP {tp:,}",
+                f"{fp:,} legitimate transactions were wrongly flagged (false positives) and {fn:,} frauds were missed "
+                "(false negatives). Near-perfect scores on this balanced dataset are optimistic compared with real data.",
+            )
+
+    for job in jobs:
+        trials = job["trials"]
+        best = job["best_trial"]
+        if not trials or not best:
+            continue
+        values = [trial["metric_value"] for trial in trials]
+        add(
+            "Hyperparameter tuning",
+            f"{job['metric_name']} ({job['model_name']})",
+            f"best {best['metric_value']:.4f}",
+            f"{len(trials)} trial(s) ranged from {min(values):.4f} to {max(values):.4f}; "
+            f"{best['candidate_id']} is best ({job['direction']} is better). "
+            + (
+                "The spread is tiny, so these settings perform almost identically."
+                if max(values) - min(values) < 0.01
+                else "Settings meaningfully affect results, so further tuning may help."
+            ),
+        )
+    return items
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -203,6 +356,7 @@ def create_app(
     analyzer: OllamaAnalyzer | None = None,
     store: MonitoringStore | None = None,
     tuning_store: TuningStore | None = None,
+    fraud_detector: FraudModel | None = None,
 ) -> Flask:
     app = Flask(__name__)
     monitoring_store = store or MonitoringStore()
@@ -212,13 +366,36 @@ def create_app(
         model=os.getenv("OLLAMA_MODEL", "llama3.2"),
     )
 
+    def record_event(
+        session: Any, event: dict[str, Any], *, run_diagnosis: bool = True
+    ) -> dict[str, Any]:
+        signals = evaluate_event(event, session.baseline)
+        if run_diagnosis:
+            try:
+                diagnosis = llm_analyzer.analyze(event, signals)
+            except requests.RequestException as exc:
+                app.logger.warning("Ollama analysis unavailable: %s", exc)
+                diagnosis = "Ollama analysis unavailable; review the statistical signals."
+        else:
+            diagnosis = "LLM diagnosis skipped for batch prediction ingestion."
+        enriched = {
+            **event,
+            "timestamp": event.get("timestamp", utc_now()),
+            "signals": signals,
+            "diagnosis": diagnosis,
+        }
+        monitoring_store.add_event(session, enriched)
+        return enriched
+
     @app.get("/health")
     def health() -> tuple[Any, int]:
         return jsonify({"status": "ok", "service": "model-monitoring"})
 
     @app.get("/dashboard")
-    def dashboard() -> str:
-        return render_template("dashboard.html")
+    def dashboard() -> Response:
+        response = app.make_response(render_template("dashboard.html"))
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.get("/api/dashboard")
     def dashboard_data() -> tuple[Any, int]:
@@ -246,6 +423,9 @@ def create_app(
         )
         analytics["tuning_figure"] = tuning_figure(jobs)
         analytics["summary"]["tuning_job_count"] = len(jobs)
+        analytics["fraud_model"] = (
+            fraud_detector.public() if fraud_detector is not None else None
+        )
         return jsonify(analytics)
 
     @app.post("/api/dashboard/insights")
@@ -285,12 +465,25 @@ def create_app(
                 for job in jobs
             ],
         }
+        explanations = metric_explanations(
+            analytics,
+            jobs,
+            fraud_detector.public() if fraud_detector is not None else None,
+        )
         try:
             insight = llm_analyzer.analyze_dashboard(summary)
         except (requests.RequestException, ValueError) as exc:
             app.logger.warning("Dashboard insight generation unavailable: %s", exc)
-            return jsonify({"error": "LLM dashboard analysis is unavailable"}), 503
-        return jsonify({"insight": insight})
+            return (
+                jsonify(
+                    {
+                        "error": "LLM dashboard analysis is unavailable",
+                        "explanations": explanations,
+                    }
+                ),
+                503,
+            )
+        return jsonify({"insight": insight, "explanations": explanations})
 
     @app.post("/monitoring/sessions")
     def create_session() -> tuple[Any, int]:
@@ -298,7 +491,9 @@ def create_app(
         model_name = body.get("model_name")
         if not isinstance(model_name, str) or not model_name.strip():
             return jsonify({"error": "model_name is required"}), 400
-        baseline = body.get("baseline", {})
+        baseline = body.get(
+            "baseline", fraud_detector.baseline if fraud_detector is not None else {}
+        )
         if not isinstance(baseline, dict):
             return jsonify({"error": "baseline must be an object"}), 400
         if baseline and "mean" not in baseline:
@@ -327,20 +522,98 @@ def create_app(
         event = request.get_json(silent=True)
         if not isinstance(event, dict):
             return jsonify({"error": "event must be a JSON object"}), 400
-        signals = evaluate_event(event, session.baseline)
+        return jsonify(record_event(session, event)), 201
+
+    @app.post("/monitoring/sessions/<session_id>/predict")
+    def predict_event(session_id: str) -> tuple[Any, int]:
+        session = monitoring_store.get(session_id)
+        if session is None:
+            return jsonify({"error": "monitoring session not found"}), 404
+        if fraud_detector is None:
+            return jsonify({"error": "fraud detection model is not loaded"}), 503
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return jsonify({"error": "request body must be a JSON object"}), 400
+        features = body.get("features")
+        if not isinstance(features, dict):
+            return jsonify({"error": "features must be an object keyed by column"}), 400
+        actual = body.get("actual")
+        if actual is not None and (
+            isinstance(actual, bool) or actual not in (0, 1)
+        ):
+            return jsonify({"error": "actual must be the binary label 0 or 1"}), 400
         try:
-            diagnosis = llm_analyzer.analyze(event, signals)
-        except requests.RequestException as exc:
-            app.logger.warning("Ollama analysis unavailable: %s", exc)
-            diagnosis = "Ollama analysis unavailable; review the statistical signals."
-        enriched = {
-            **event,
-            "timestamp": event.get("timestamp", utc_now()),
-            "signals": signals,
-            "diagnosis": diagnosis,
+            prediction = fraud_detector.predict(features)
+        except (TypeError, ValueError) as exc:
+            return jsonify({"error": str(exc)}), 400
+
+        event = {
+            "features": features,
+            "prediction": prediction["fraud_probability"],
+            **prediction,
         }
-        monitoring_store.add_event(session, enriched)
-        return jsonify(enriched), 201
+        if actual is not None:
+            event["actual"] = actual
+        if isinstance(body.get("timestamp"), str):
+            event["timestamp"] = body["timestamp"]
+        return jsonify(record_event(session, event)), 201
+
+    @app.post("/monitoring/sessions/<session_id>/predict/batch")
+    def predict_batch(session_id: str) -> tuple[Any, int]:
+        session = monitoring_store.get(session_id)
+        if session is None:
+            return jsonify({"error": "monitoring session not found"}), 404
+        if fraud_detector is None:
+            return jsonify({"error": "fraud detection model is not loaded"}), 503
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return jsonify({"error": "request body must be a JSON object"}), 400
+        rows = body.get("rows")
+        if not isinstance(rows, list) or not rows:
+            return jsonify({"error": "rows must be a non-empty array"}), 400
+        if len(rows) > 1000:
+            return jsonify({"error": "a batch may contain at most 1000 rows"}), 400
+        diagnose = body.get("diagnose", False)
+        if not isinstance(diagnose, bool):
+            return jsonify({"error": "diagnose must be a boolean"}), 400
+
+        pending_events: list[dict[str, Any]] = []
+        for index, row in enumerate(rows):
+            if not isinstance(row, dict):
+                return jsonify({"error": f"rows[{index}] must be an object"}), 400
+            features = row.get("features")
+            if not isinstance(features, dict):
+                return jsonify(
+                    {"error": f"rows[{index}].features must be an object"}
+                ), 400
+            actual = row.get("actual")
+            if actual is not None and (
+                isinstance(actual, bool) or actual not in (0, 1)
+            ):
+                return jsonify(
+                    {"error": f"rows[{index}].actual must be 0 or 1"}
+                ), 400
+            try:
+                prediction = fraud_detector.predict(features)
+            except (TypeError, ValueError) as exc:
+                return jsonify({"error": f"rows[{index}]: {exc}"}), 400
+
+            event = {
+                "features": features,
+                "prediction": prediction["fraud_probability"],
+                **prediction,
+            }
+            if actual is not None:
+                event["actual"] = actual
+            if isinstance(row.get("timestamp"), str):
+                event["timestamp"] = row["timestamp"]
+            pending_events.append(event)
+
+        events = [
+            record_event(session, event, run_diagnosis=diagnose)
+            for event in pending_events
+        ]
+        return jsonify({"session_id": session_id, "count": len(events), "events": events}), 201
 
     @app.get("/monitoring/sessions/<session_id>/stream")
     def stream_events(session_id: str) -> Response:
@@ -462,7 +735,15 @@ def create_app(
     return app
 
 
-app = create_app()
+_configured_fraud_model_path = os.getenv(
+    "FRAUD_MODEL_PATH", "artifacts/fraud_detector.joblib"
+)
+_configured_fraud_detector = (
+    load_fraud_model(_configured_fraud_model_path)
+    if os.path.isfile(_configured_fraud_model_path)
+    else None
+)
+app = create_app(fraud_detector=_configured_fraud_detector)
 
 
 if __name__ == "__main__":

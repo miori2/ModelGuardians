@@ -41,6 +41,13 @@
     .insight { min-height: 100px; margin: 0; color: #c8d5e9; line-height: 1.65; white-space: pre-wrap; }
     .status { padding: 12px 14px; border: 1px solid #303c50; border-radius: 8px; color: #b9c7dc; background: #151e2c; }
     .status.error { color: #ffb4aa; border-color: #713e42; }
+    h3 { margin: 18px 0 8px; font-size: .9rem; color: #9ca9be; text-transform: uppercase; letter-spacing: .04em; }
+    .metric-list { display: grid; gap: 8px; }
+    .metric-row { display: grid; grid-template-columns: 200px 190px 1fr; gap: 14px; padding: 12px 14px; border: 1px solid #222e40; border-radius: 8px; background: #151e2c; align-items: baseline; }
+    .metric-name { font-weight: 600; }
+    .metric-value { color: #ffd166; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .metric-text { color: #c8d5e9; line-height: 1.5; font-size: .92rem; }
+    @media (max-width: 760px) { .metric-row { grid-template-columns: 1fr; gap: 4px; } }
     .footer { margin: 14px 2px 0; color: #7e8ba0; font-size: .8rem; }
     @media (max-width: 760px) {
       header { align-items: flex-start; flex-direction: column; }
@@ -74,10 +81,12 @@
       <div class="card"><div class="card-label">Drift signals</div><div class="card-value" id="drift-count">—</div></div>
     </section>
     <div id="load-status" class="status" role="status">Loading monitoring data…</div>
+    <div id="model-status" class="status" role="status" style="margin-top: 10px">Fraud detection model status is loading…</div>
     <section class="grid" style="margin-top: 16px">
       <article class="panel">
         <h2>Observed signal and short-term forecast</h2>
         <div id="monitoring-chart" class="plot" aria-label="Observed signal and forecast chart"></div>
+        <p class="footer">With the fraud detector enabled, the observed signal is each prediction's fraud probability (faint dots), and the yellow line is its 20-event rolling average. The forecast extends that recent trend; it is not a separate model prediction.</p>
       </article>
       <article class="panel">
         <h2>LLM-assisted analytics</h2>
@@ -85,6 +94,10 @@
         <button id="insights-button" type="button">Generate insights</button>
         <p id="insight" class="insight" style="margin-top: 16px" aria-live="polite">Insights are generated on demand using your configured Ollama model.</p>
       </article>
+    </section>
+    <section class="panel" id="explanations-panel" hidden style="margin-bottom: 16px">
+      <h2>Metric explanations</h2>
+      <div id="explanations" aria-live="polite"></div>
     </section>
     <section class="panel">
       <h2>Hyperparameter tuning results</h2>
@@ -152,6 +165,14 @@
         document.getElementById("event-count").textContent = data.summary.event_count;
         document.getElementById("anomaly-count").textContent = data.summary.anomaly_count;
         document.getElementById("drift-count").textContent = data.summary.drift_count;
+        const modelStatus = document.getElementById("model-status");
+        if (data.fraud_model) {
+          const score = data.fraud_model.metrics.average_precision;
+          modelStatus.textContent =
+            `${data.fraud_model.model_name} loaded · ${data.fraud_model.feature_count} features · test average precision ${score.toFixed(3)} · ${data.fraud_model.dataset_summary.row_count.toLocaleString()} dataset rows`;
+        } else {
+          modelStatus.textContent = "Fraud detection model is not loaded. Train it with `python fraud_pipeline.py train`, then restart the app.";
+        }
         renderMonitoring(data);
         renderTuning(data);
         loadStatus.textContent = `Updated ${new Date().toLocaleTimeString()} · ${data.summary.tuning_job_count} tuning jobs`;
@@ -162,6 +183,27 @@
         refreshInProgress = false;
         refreshButton.disabled = false;
       }
+    }
+
+    function renderExplanations(items) {
+      const container = document.getElementById("explanations");
+      const panel = document.getElementById("explanations-panel");
+      if (!Array.isArray(items) || !items.length) {
+        panel.hidden = true;
+        return;
+      }
+      const groups = {};
+      items.forEach(item => (groups[item.group] = groups[item.group] || []).push(item));
+      container.innerHTML = Object.entries(groups).map(([group, rows]) => `
+        <h3>${escapeHtml(group)}</h3>
+        <div class="metric-list">${rows.map(row => `
+          <div class="metric-row">
+            <div class="metric-name">${escapeHtml(row.metric)}</div>
+            <div class="metric-value">${escapeHtml(row.value)}</div>
+            <div class="metric-text">${escapeHtml(row.explanation)}</div>
+          </div>`).join("")}
+        </div>`).join("");
+      panel.hidden = false;
     }
 
     function escapeHtml(value) {
@@ -184,7 +226,11 @@
           body: JSON.stringify({ session_id: sessionFilter.value || null })
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Unable to generate insights");
+        renderExplanations(data.explanations);
+        if (!response.ok) {
+          insightText.textContent = `${data.error || "Unable to generate insights"}. Metric explanations are shown below.`;
+          return;
+        }
         insightText.textContent = data.insight || "The configured LLM returned an empty analysis.";
       } catch (error) {
         insightText.textContent = error.message;

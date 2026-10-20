@@ -81,7 +81,7 @@ class MonitoringStore:
 
 
 def numeric_values(event: dict[str, Any]) -> list[float]:
-    values = event.get("features", event.get("prediction"))
+    values = event.get("prediction", event.get("features"))
     if isinstance(values, (int, float)) and not isinstance(values, bool):
         return [float(values)]
     if isinstance(values, list):

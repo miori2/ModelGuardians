@@ -3,5 +3,6 @@ pandas>=2.2
 numpy>=2.0
 scikit-learn>=1.5
 joblib>=1.4
+kagglehub>=0.3
 requests>=2.32
 plotly>=5.24

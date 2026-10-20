@@ -95,6 +95,17 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(
             response.get_json()["error"], "LLM dashboard analysis is unavailable"
         )
+        self.assertTrue(response.get_json()["explanations"])
+
+    def test_insights_include_metric_explanations(self):
+        data = self.client.post(
+            "/api/dashboard/insights", json={"session_id": self.session["id"]}
+        ).get_json()
+        metrics = {item["metric"]: item for item in data["explanations"]}
+        self.assertEqual(metrics["Observed events"]["value"], "3")
+        self.assertIn("Anomalies", metrics)
+        self.assertIn("Drift signals", metrics)
+        self.assertTrue(all(item["explanation"] for item in data["explanations"]))
 
 
 if __name__ == "__main__":

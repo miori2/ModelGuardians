@@ -139,3 +139,61 @@ monitoring or chart data.
 Dashboard data is available as JSON from `GET /api/dashboard`, optionally
 filtered with `?session_id=<SESSION_ID>`. Request LLM analysis with
 `POST /api/dashboard/insights` and an optional JSON `session_id`.
+
+## Credit-card fraud dataset workflow
+
+The project includes a workflow for the public Kaggle
+**Credit Card Fraud Detection Dataset 2023**. The first training run downloads
+the CSV into `data/raw/` (about 143 MB), inspects its columns, trains a
+class-weighted histogram gradient-boosting classifier, saves it under
+`artifacts/`, and prints held-out evaluation metrics:
+
+```bash
+python fraud_pipeline.py train
+```
+
+The dataset has 568,630 rows, 28 anonymized `V1`–`V28` features, `Amount`, an
+`id` identifier (excluded from training), and the `Class` fraud label. Its
+classes are balanced in this dataset; precision and probability calibration
+may therefore differ from real-world fraud prevalence. The training command
+does a stratified train/test split and reports precision, recall, F1, ROC-AUC,
+average precision, and a confusion matrix. Dataset and model files are local
+and git-ignored; they are not checked into the repository.
+
+After training, start or restart the app so it loads the saved model:
+
+```bash
+python ModelGuardians.py
+```
+
+Replay up to 500 sampled dataset rows through the trained model and into a
+monitoring session (the app must be running):
+
+```bash
+python fraud_pipeline.py replay --limit 500
+```
+
+Open `http://127.0.0.1:5000/dashboard`. The **Observed signal and short-term
+forecast** chart plots each row's model-predicted fraud probability; the
+forecast is a linear extrapolation of recent probabilities, not a second
+model prediction. Batch ingestion is capped at 1,000 rows per request and
+skips per-event LLM calls by default. To adjust the replay pace, use
+`--batch-size` and `--delay`.
+
+Run measured hyperparameter trials and submit their validation average
+precision to the existing tuning API so they appear in **Hyperparameter tuning
+results**:
+
+```bash
+python fraud_pipeline.py tune --max-trials 3
+```
+
+The app must be running for both `replay` and `tune`. The selected metric is
+average precision, useful for comparing fraud classifiers; tuning jobs remain
+in memory and disappear when the app restarts. The training, replay, and
+tuning commands accept `--data path/to/file.csv` to use a local CSV instead of
+downloading the Kaggle copy. Set `FRAUD_MODEL_PATH` if the model artifact is
+stored at a non-default path. The prediction API also accepts individual
+feature rows at
+`POST /monitoring/sessions/<SESSION_ID>/predict`; the dataset replay command
+uses the batch variant.
